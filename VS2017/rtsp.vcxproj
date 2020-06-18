@@ -127,6 +127,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\example\push_server.cpp" />
+    <ClCompile Include="..\example\rtsp_get.cpp" />
     <ClCompile Include="..\example\rtsp_h264_file.cpp" />
     <ClCompile Include="..\example\rtsp_h264_file.h" />
     <ClCompile Include="..\example\rtsp_pusher.cpp" />
@@ -157,6 +158,7 @@
     <ClCompile Include="..\src\xop\MediaSession.cpp" />
     <ClCompile Include="..\src\xop\RtpConnection.cpp" />
     <ClCompile Include="..\src\xop\RtspConnection.cpp" />
+    <ClCompile Include="..\src\xop\RtspGet.cpp" />
     <ClCompile Include="..\src\xop\RtspMessage.cpp" />
     <ClCompile Include="..\src\xop\RtspPusher.cpp" />
     <ClCompile Include="..\src\xop\RtspServer.cpp" />
@@ -198,6 +200,7 @@
     <ClInclude Include="..\src\xop\RtpConnection.h" />
     <ClInclude Include="..\src\xop\rtsp.h" />
     <ClInclude Include="..\src\xop\RtspConnection.h" />
+    <ClInclude Include="..\src\xop\RtspGet.h" />
     <ClInclude Include="..\src\xop\RtspMessage.h" />
     <ClInclude Include="..\src\xop\RtspPusher.h" />
     <ClInclude Include="..\src\xop\RtspServer.h" />

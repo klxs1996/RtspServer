@@ -16,7 +16,7 @@
 //	}
 //
 //	H264File h264_file;
-//	if (!h264_file.Open("D:/test/Video/1080p.h264")) {
+//	if (!h264_file.Open("D:/test/test.h264")) {
 //		printf("Open %s failed.\n", argv[1]);
 //		return 0;
 //	}
@@ -60,7 +60,7 @@
 //
 //	getchar();
 //	return 0;
-//}
+//} 
 //
 //void SendFrameThread(xop::RtspServer* rtsp_server, xop::MediaSessionId session_id, H264File* h264_file)
 //{
@@ -72,14 +72,24 @@
 //	int frame_type = 0;	//if frame is I frame,set value 1 
 //	int frame_count = 0;
 //
+//	
 //	while (1) {
 //		bool end_of_frame = false;
 //		int frame_size = h264_file->ReadFrame((char*)frame_buf.get(), buf_size, &end_of_frame, frame_type);
 //
 //		//printf("frame_size:%d\n", frame_size);
 //
-//		if (++frame_count % 50 == 0 && res != 0)
+//		char buf[64] = { 0 };
+//		sprintf(buf, "%d\n", frame_size);
+//		static FILE* fp = fopen("D:/test/test2", "wb");
+//		if (fp)
 //		{
+//			fwrite(buf, strlen(buf), 1, fp);
+//		}
+//
+//		if (++frame_count % 25 == 0 && res != 0)
+//		{
+//			printf("size:%d\n", res);
 //			xop::AVFrame headFrame = { 0 };
 //			headFrame.type = 0;
 //			headFrame.size = res;
@@ -87,7 +97,6 @@
 //			headFrame.buffer.reset(new uint8_t[res]);
 //			memcpy(headFrame.buffer.get(), file_head.get(), res);
 //			rtsp_server->PushFrame(session_id, xop::channel_0, headFrame);
-//			new_connect = false;
 //			xop::Timer::Sleep(20);
 //		}
 //

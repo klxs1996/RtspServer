@@ -78,6 +78,7 @@ void TcpConnection::HandleRead()
 			return;
 		}
 	}
+	//printf("%d\n", read_buffer_->GetReadPos());
 
 	if (read_cb_) {
 		bool ret = read_cb_(shared_from_this(), *read_buffer_);

@@ -140,6 +140,7 @@ public:
 	int BuildAnnounceReq(const char* buf, int buf_size, const char *sdp);
 	int BuildSetupTcpReq(const char* buf, int buf_size, int trackId);
 	int BuildRecordReq(const char* buf, int buf_size);
+	int BuildPlay(const char* buf, int buf_size);
 
 private:
 	Method method_;

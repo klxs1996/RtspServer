@@ -719,3 +719,23 @@ int RtspResponse::BuildRecordReq(const char* buf, int buf_size)
 	method_ = RECORD;
 	return (int)strlen(buf);
 }
+
+int xop::RtspResponse::BuildPlay(const char * buf, int buf_size)
+{
+	memset((void*)buf, 0, buf_size);
+	snprintf((char*)buf, buf_size,
+		"PLAY %s RTSP/1.0\r\n"
+		"Range: npt=0.000-\r\n"
+		"CSeq: %u\r\n"
+		"User-Agent: %s\r\n"
+		"Session: %s\r\n"
+		"\r\n",
+		rtsp_url_.c_str(),
+		this->GetCSeq() + 1,
+		user_agent_.c_str(),
+		this->GetSession().c_str());
+
+	method_ = PLAY;
+	return (int)strlen(buf);
+
+}

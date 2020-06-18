@@ -9,6 +9,7 @@
 #include "RtpConnection.h"
 #include "RtspMessage.h"
 #include "DigestAuthentication.h"
+#include "RTPPacketAnalysis.h"
 #include "rtsp.h"
 #include <iostream>
 #include <functional>
@@ -27,12 +28,14 @@ class RtspConnection : public TcpConnection
 public:
 	typedef std::function<void (SOCKET sockfd)> CloseCallback;
 	typedef std::function<void(MediaSession* session)> NewSessionCallback;
+	typedef std::function<void(std::string session_id)> RemoveSessionCallback;
 
 	enum ConnectionMode
 	{
 		RTSP_FILE_SERVER, 
 		RTSP_PUSH_SERVER,
 		RTSP_PUSH_CLIENT,
+		RTSP_SERVER
 		//RTSP_CLIENT,
 	};
 
@@ -48,6 +51,7 @@ public:
 	~RtspConnection();
 
 	void SetNewSessionCallback(NewSessionCallback cb) { new_session_cb = cb; }
+	void SetRemoveSessionCallback(RemoveSessionCallback cb) { remove_session_cb = cb; };
 
 	MediaSessionId GetMediaSessionId()
 	{ return session_id_; }
@@ -99,8 +103,10 @@ private:
 	bool HandleTakeResponse(BufferReader& buffer);
 	bool HandlePushRequest(BufferReader& buffer);
 	bool HandlePushResponse(BufferReader& buffer);
+	bool HandleRtspGetResponse(BufferReader& buffer);
 
 	void SendRtspMessage(std::shared_ptr<char> buf, uint32_t size);
+	int  ParseRtpPacket(const uint8_t* in, uint8_t* out, int len, bool& is_success,int& type);
 
 	void HandleCmdOption();
 	void HandleCmdDescribe();
@@ -112,6 +118,7 @@ private:
 	void HandleCmdRecord();
 	void HandleCmdGetParamter();
 	bool HandleAuthentication();
+	void HandleRecord();
 
 	void SetOptions();
 	void SetMode(ConnectionMode mode = RTSP_FILE_SERVER) {
@@ -120,7 +127,7 @@ private:
 	void SendDescribe();
 	void SendAnnounce();
 	void SendSetup();
-	void HandleRecord();
+	void SendPlay();
 
 	std::atomic_int alive_count_;
 	std::weak_ptr<Rtsp> rtsp_;
@@ -129,11 +136,18 @@ private:
 	ConnectionMode  conn_mode_ = RTSP_FILE_SERVER;
 	ConnectionState conn_state_ = START_CONNECT;
 	MediaSessionId  session_id_ = 0;
-	NewSessionCallback new_session_cb;
+	NewSessionCallback new_session_cb = NULL;
+	RemoveSessionCallback remove_session_cb = NULL;
 
 	xop::AVFrame video_frame = { 0 };
+	//uint8_t frame_sps[64] = { 0x00,0x00,0x00,0x01,0x67,0x64,0x00,0x28,0xAC,0x24,0x88,0x07,0x80,0x22,0x7E,0x58,0x40,0x00,0x00,0xFA,0x40,0x00,0x2E,0xE0,0x03,0xC6,0x0C,0xA8,0x00,0x00,0x00,0x01,0x68,0xEE,0x3C,0xB0 };
+	uint8_t frame_sps[64] = { 0 };
+	uint8_t frame_sps_size = 0;
+	
+
 	bool has_auth_ = true;
 	bool is_complete = false;
+	bool has_connect = false;
 	std::string _nonce;
 	std::unique_ptr<DigestAuthentication> auth_info_;
 

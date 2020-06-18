@@ -32,6 +32,8 @@ public:
     typedef std::function<void (MediaSessionId sessionId, uint32_t numClients)> NotifyCallback;
 
     static MediaSession* CreateNew(std::string url_suffxx="live");
+	void Close(MediaSession*);
+
     ~MediaSession();
 
     bool AddSource(MediaChannelId channel_id, MediaSource* source);

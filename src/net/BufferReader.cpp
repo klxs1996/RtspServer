@@ -76,25 +76,30 @@ int BufferReader::Read(SOCKET sockfd)
 		buffer_->resize(bufferReaderSize + MAX_BYTES_PER_READ);
 	}
 
-	std::this_thread::sleep_for(std::chrono::microseconds(3));
+	std::this_thread::sleep_for(std::chrono::microseconds(10));
 
-	int bytes_read = ::recv(sockfd, beginWrite(), MAX_BYTES_PER_READ, 0);
-	if(bytes_read > 0) {
-		writer_index_ += bytes_read;
+	int res = ::recv(sockfd, beginWrite(), MAX_BYTES_PER_READ, 0);
+	if(res > 0) {
+		writer_index_ += res;
 	}
-	if ((Begin()[0] & 0xFF) == 0x24 && (Begin()[1] & 0xFF) == 0x0)
+	if ((Peek()[0] & 0xFF) == 0x24 && ((Peek()[1] & 0xFF) == 0x00 || (Peek()[1] & 0xFF) == 0x01))
 	{
 		is_payload = true;
 	}
 
-	printf("bytes_read size:%6d  ", bytes_read);
-	//for (size_t i = 0; i < 10; i++)
+	//else
+	//{
+	//	printf("warning....\n");
+	//}
+
+	//printf("size:%6d\n", res);
+	//for (size_t i = 0; i < 18; i++)
 	//{
 	//	printf("%02X ", Begin()[i] & 0xFF);
 	//}
 	//printf("\n");
 
-	return bytes_read;
+	return res;
 }
 
 

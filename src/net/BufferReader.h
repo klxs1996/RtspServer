@@ -24,15 +24,16 @@ uint16_t ReadUint16LE(char* data);
 class BufferReader
 {
 public:	
-	static const uint32_t kInitialSize = 2048;
+	static const uint32_t kInitialSize = 4096;
 	BufferReader(uint32_t initialSize = kInitialSize);
+	int GetReadPos() { return writer_index_; }
 	virtual ~BufferReader();
 
 	bool IsPayload() const
 	{ return is_payload; }
 
 	uint32_t ReadableBytes() const
-	{ return (uint32_t)(writer_index_ - reader_index_); }
+	{ return (uint32_t)(writer_index_ - reader_index_ > 0 ? writer_index_ - reader_index_ : 0); }
 
 	uint32_t WritableBytes() const
 	{  return (uint32_t)(buffer_->size() - writer_index_); }

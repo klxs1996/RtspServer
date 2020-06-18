@@ -14,7 +14,7 @@
 using namespace xop;
 using namespace std;
 
-std::atomic_uint MediaSession::last_session_id_(1);
+std::atomic_uint MediaSession::last_session_id_(1);//累加会导致无法使用已被释放的session id
 
 MediaSession::MediaSession(std::string url_suffxx)
     : suffix_(url_suffxx)
@@ -34,6 +34,15 @@ MediaSession* MediaSession::CreateNew(std::string url_suffxx)
 	return new MediaSession(std::move(url_suffxx));
 }
 
+void xop::MediaSession::Close(MediaSession * session)
+{
+	if (session)
+	{
+		delete session;
+		session = NULL;
+	}
+}
+
 MediaSession::~MediaSession()
 {
 	if (multicast_ip_ != "") {
@@ -44,7 +53,6 @@ MediaSession::~MediaSession()
 bool MediaSession::AddSource(MediaChannelId channelId, MediaSource* source)
 {
 	source->SetSendFrameCallback([this](MediaChannelId channelId, RtpPacket pkt) {
-		std::forward_list<std::shared_ptr<RtpConnection>> clients;
 		std::map<int, RtpPacket> packets;
 		{
 			std::lock_guard<std::mutex> lock(map_mutex_);
@@ -54,40 +62,12 @@ bool MediaSession::AddSource(MediaChannelId channelId, MediaSource* source)
 					clients_.erase(iter++);
 				}
 				else  {				
-					int id = conn->GetId();
-					if (id >= 0) {
-						if (packets.find(id) == packets.end()) {
-							RtpPacket tmpPkt;
-							memcpy(tmpPkt.data.get(), pkt.data.get(), pkt.size);
-							tmpPkt.size = pkt.size;
-							tmpPkt.last = pkt.last;
-							tmpPkt.timestamp = pkt.timestamp;
-							tmpPkt.type = pkt.type;
-							packets.emplace(id, tmpPkt);
-						}
-						clients.emplace_front(conn);
-					}
+					conn->SendRtpPacket(channelId, pkt);
 					iter++;
 				}
 			}
 		}
         
-		//发送的经过 ？？
-		int count = 0;
-		for(auto iter : clients) {
-			int ret = 0;
-			int id = iter->GetId();
-			if (id >= 0) {
-				auto iter2 = packets.find(id);
-				if (iter2 != packets.end()) {
-					count++;
-					ret = iter->SendRtpPacket(channelId, iter2->second);
-					if (is_multicast_ && ret == 0) {
-						break;
-					}				
-				}
-			}					
-		}
 		return true;
     });
 

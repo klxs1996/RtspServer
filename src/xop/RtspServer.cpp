@@ -50,6 +50,42 @@ void RtspServer::RemoveSession(MediaSessionId sessionId)
     }
 }
 
+bool xop::RtspServer::OpenUrl(std::string url)
+{
+	Rtsp::parseRtspUrl(url);
+
+	TcpSocket socket;
+	
+	for (size_t i = 0; i < MAX_GET_STREAM_SOCKET; i++)
+	{
+		if (_rtsp_socket[i] == 0)
+		{
+			_rtsp_socket[i] = socket.Create();
+			break;
+		}
+		if (i == MAX_GET_STREAM_SOCKET - 1)
+		{
+			//超出最大连接限制
+			return false;
+		}
+	}
+
+	if (!socket.Connect(rtsp_url_info_.ip, rtsp_url_info_.port, 10000))
+	{
+		socket.Close();
+	}
+
+	std::shared_ptr<xop::RtspConnection> _rtsp_connect(new xop::RtspConnection(shared_from_this(), event_loop_->GetTaskScheduler().get(), socket.GetSocket()));
+	event_loop_->AddTriggerEvent([_rtsp_connect]() {
+		_rtsp_connect->SetOptions();
+		_rtsp_connect->SetMode(RtspConnection::RTSP_SERVER);
+	});
+
+	rtsp_get_socket_list.push_back(_rtsp_connect);
+
+	return true;
+}
+
 MediaSessionPtr RtspServer::LookMediaSession(const std::string& suffix)
 {
     std::lock_guard<std::mutex> locker(mutex_);
@@ -101,14 +137,21 @@ TcpConnection::Ptr RtspServer::OnConnect(SOCKET sockfd)
 {
 	auto conn = std::make_shared<RtspConnection>(shared_from_this(), event_loop_->GetTaskScheduler().get(), sockfd);
 
-	printf("access...\n\n");
-	if (PUSH_SERVER == _type)
+	if (PUSH_SERVER == _type || RTSP_SERVER == _type)
 	{
 		conn->SetMode(RtspConnection::RTSP_PUSH_SERVER);
 		conn->SetNewSessionCallback([=](MediaSession* session) {
-			if (session)
-			{
+			if (session){
 				MediaSessionId id = this->AddSession(session);
+			}
+		});
+		conn->SetRemoveSessionCallback([=](std::string suffix)
+		{
+			if (!suffix.empty()){
+				auto iter = rtsp_suffix_map_.find(suffix);
+				if (iter != rtsp_suffix_map_.end()){
+					RemoveSession(iter->second);
+				}
 			}
 		});
 
@@ -116,8 +159,10 @@ TcpConnection::Ptr RtspServer::OnConnect(SOCKET sockfd)
 	else
 	{
 		conn->SetMode(RtspConnection::RTSP_FILE_SERVER);
+
 	}
-	
+	has_connect = true;
+
 	return conn;
 }
 

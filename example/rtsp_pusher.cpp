@@ -23,6 +23,7 @@
 //	rtsp_pusher->AddSession(session);
 //
 //	std::string url = argc >= 2 ? argv[1] : PUSH_TEST;
+//	url = url.find("rtsp") == std::string::npos ? PUSH_TEST : argv[1];
 //
 //	if (rtsp_pusher->OpenUrl(url.c_str(), 3000) < 0) {
 //		std::cout << "Open " << url.c_str() << " failed." << std::endl;
@@ -42,7 +43,7 @@
 //	getchar();
 //	return 0;
 //}
-//
+//xop::AVFrame videoFrame = { 0 };
 //void sendFrameThread(xop::RtspPusher* rtsp_pusher)
 //{
 //	H264File h264_file;
@@ -59,35 +60,35 @@
 //	bool end = false;
 //	int frame_type = 0;
 //	int frame_count = 0;
-//	
+//
+//	xop::AVFrame headFrame = { 0 };
+//
+//	videoFrame.buffer.reset(new uint8_t[300000]);
+//	headFrame.buffer.reset(new uint8_t[300000]);
 //	while(rtsp_pusher->IsConnected())
-//	{   
+//	{   	
 //		int size = h264_file.ReadFrame((char*)frame_buf.get(), buf_size, &end, frame_type);
-//		
+//
 //		if (++frame_count % 50 == 0 && res != 0)
 //		{
-//			xop::AVFrame headFrame = { 0 };
+//
 //			headFrame.type = 0;
 //			headFrame.size = res;
 //			headFrame.timestamp = xop::H264Source::GetTimestamp();
-//			headFrame.buffer.reset(new uint8_t[res]);
 //			memcpy(headFrame.buffer.get(), file_head.get(), res);
 //			rtsp_pusher->PushFrame(xop::channel_0, headFrame);
 //			xop::Timer::Sleep(20);
 //		}
 //
-//		if(size > 0)
-//		{                              
-//			xop::AVFrame videoFrame = { 0 };
+//		if (size > 0)
+//		{	
 //			videoFrame.type = 0;
 //			videoFrame.size = size;
 //			videoFrame.timestamp = xop::H264Source::GetTimestamp();
-//			videoFrame.buffer.reset(new uint8_t[videoFrame.size]);
-//			
 //			memcpy(videoFrame.buffer.get(), frame_buf.get(), videoFrame.size);
 //			rtsp_pusher->PushFrame(xop::channel_0, videoFrame);
 //		}
-//                
+//
 //		{				                       
 //			/*
 //				//获取一帧 AAC, 打包
@@ -103,4 +104,5 @@
 //
 //		xop::Timer::Sleep(40); 
 //	}
+//	printf("end!\n");
 //}

@@ -74,8 +74,6 @@ int H264File::ReadFrame(char* in_buf, int in_buf_size, bool* end, int& frame_typ
 		if (/*((m_buf[i + start_code] & 0x1F) == 0x7) ||
 			((m_buf[i + start_code] & 0x1F) == 0x8) || */
 			(((m_buf[i + start_code] & 0x1F) == 0x5 || (m_buf[i + start_code] & 0x1F) == 0x1) && ((m_buf[i + start_code + 1] & 0x80) == 0x80))) {
-			if ((m_buf[i + start_code] & 0x1F) == 0x5)
-				frame_type = 1;
 			is_find_start = true;
 			i += 4;
 			break;

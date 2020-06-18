@@ -31,7 +31,7 @@ RtspConnection::RtspConnection(std::shared_ptr<Rtsp> rtsp, TaskScheduler *task_s
 	});
 
 	alive_count_ = 1;
-	video_frame.buffer.reset(new uint8_t[300000]);
+	video_frame.buffer.reset(new uint8_t[250000]);
 
 	rtp_channel_->SetReadCallback([this]() { this->HandleRead(); });
 	rtp_channel_->SetWriteCallback([this]() { this->HandleWrite(); });
@@ -58,54 +58,8 @@ bool RtspConnection::OnReadyRead(BufferReader& buffer)
 {
 	KeepAlive();
 
-	if (is_complete && buffer.IsPayload())
-	{
-		static FILE* fp = fopen("D:/test/test.h264", "wb+");
-
-		if (fp)
-		{
-			fwrite(buffer.Peek(), buffer.ReadableBytes(), 1, fp);
-		}
-
-		auto rtsp = rtsp_.lock();
-		if (rtsp)
-		{
-		//	std::chrono::time_point<std::chrono::high_resolution_clock> begin = std::chrono::high_resolution_clock::now();
-
-			video_frame.type = 0;
-			video_frame.size = buffer.ReadableBytes();
-			video_frame.timestamp = xop::H264Source::GetTimestamp();
-
-			memcpy(video_frame.buffer.get(), buffer.Peek(), video_frame.size);
-			rtsp->PushFrame(session_id_, MediaChannelId::channel_0, video_frame);
-
-		//	printf("speed time:%lld\n", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - begin).count());
-			buffer.RetrieveAll();
-		//	std::this_thread::sleep_for(std::chrono::milliseconds(35));
-		}
-
-		return true;
-	}
-	else
-	{
-		//printf("***************************read******************************\n");
-		//for (size_t i = 0; i < buffer.ReadableBytes(); i++)
-		//{
-		//	printf("%c", buffer.Peek()[i]);
-		//}
-		//printf("\n");
-	}
-
-
-	int size = buffer.ReadableBytes();
-	if (size <= 0) {
+	if (buffer.ReadableBytes() <= 0) {
 		return false; //close
-	}
-
-	if (buffer.IsPayload())
-	{
-
-		return true;
 	}
 
 	if (conn_mode_ == RTSP_FILE_SERVER) {
@@ -121,6 +75,12 @@ bool RtspConnection::OnReadyRead(BufferReader& buffer)
 	}
 	else if (conn_mode_ == RTSP_PUSH_CLIENT) {
 		if (!HandleTakeResponse(buffer)) {           
+			return false;
+		}
+	}
+	else if (conn_mode_ == RTSP_SERVER)
+	{
+		if (!HandleRtspGetResponse(buffer)) {
 			return false;
 		}
 	}
@@ -226,9 +186,7 @@ bool RtspConnection::HandleTakeResponse(BufferReader& buffer)
 		switch (method)
 		{
 		case RtspResponse::OPTIONS:
-			if (conn_mode_ == RTSP_PUSH_CLIENT) {
-				SendAnnounce();
-			}             
+			SendAnnounce();
 			break;
 		case RtspResponse::ANNOUNCE:
 		case RtspResponse::DESCRIBE:
@@ -260,6 +218,49 @@ bool RtspConnection::HandlePushRequest(BufferReader& buffer)
 		std::cout << str << std::endl;
 	}
 #endif
+
+	//如果是负载数据
+	if (buffer.IsPayload())
+	{
+		auto rtsp = rtsp_.lock();
+		if (rtsp)
+		{
+			//	std::chrono::time_point<std::chrono::high_resolution_clock> begin = std::chrono::high_resolution_clock::now();
+			bool is_success = true;
+
+			static int frame_count = 0;
+			if (++frame_count % 25 == 0 && frame_sps_size != 0)
+			{
+				static xop::AVFrame slice_head(64);
+				slice_head.type = 0;
+				slice_head.size = frame_sps_size;
+				slice_head.timestamp = xop::H264Source::GetTimestamp();
+				memcpy(slice_head.buffer.get(), frame_sps, frame_sps_size);
+				rtsp->PushFrame(session_id_, xop::channel_0, slice_head);
+				xop::Timer::Sleep(10);
+			}
+
+			int key_frame = 0;
+			video_frame.type = 0;
+			video_frame.timestamp = xop::H264Source::GetTimestamp();//放在解包前面是防止解析rtp包时耗费过大时间，从而导致时间戳不对应
+			int res = ParseRtpPacket((uint8_t*)buffer.Peek(), video_frame.buffer.get(), buffer.ReadableBytes(), is_success, key_frame);
+
+			if (is_success)
+			{
+				video_frame.size = res;
+				rtsp->PushFrame(session_id_, MediaChannelId::channel_0, video_frame);
+				buffer.RetrieveAll();
+			}
+		}
+		return true;
+	}
+
+	printf("***************************read******************************\n");
+	for (size_t i = 0; i < buffer.ReadableBytes(); i++)
+	{
+		printf("%c", buffer.Peek()[i]);
+	}
+	printf("\n");
 
 	if (rtsp_request_->ParseRequest(&buffer)) {
 		RtspRequest::Method method = rtsp_request_->GetMethod();
@@ -347,6 +348,83 @@ bool RtspConnection::HandlePushResponse(BufferReader& buffer)
 	return true;
 }
 
+bool xop::RtspConnection::HandleRtspGetResponse(BufferReader & buffer)
+{
+
+	//printf("%d\n", buffer.ReadableBytes());
+
+	if (buffer.IsPayload())
+	{
+		auto rtsp = rtsp_.lock();
+		if (rtsp)
+		{
+			//	std::chrono::time_point<std::chrono::high_resolution_clock> begin = std::chrono::high_resolution_clock::now();
+			bool is_success = true;
+
+			static int frame_count = 0;
+			if (++frame_count % 25 == 0 && frame_sps_size != 0)
+			{
+				static xop::AVFrame slice_head(64);
+				slice_head.type = 0;
+				slice_head.size = frame_sps_size;
+				slice_head.timestamp = xop::H264Source::GetTimestamp();
+				memcpy(slice_head.buffer.get(), frame_sps, frame_sps_size);
+				rtsp->PushFrame(session_id_, xop::channel_0, slice_head);
+				xop::Timer::Sleep(10);
+			}
+
+			int key_frame = 0;
+			video_frame.type = 0;
+			video_frame.timestamp = xop::H264Source::GetTimestamp();//放在解包前面是防止解析rtp包时耗费过大时间，从而导致时间戳不对应
+			int res = ParseRtpPacket((uint8_t*)buffer.Peek(), video_frame.buffer.get(), buffer.ReadableBytes(), is_success, key_frame);
+
+			if (is_success)
+			{
+				video_frame.size = res;
+				rtsp->PushFrame(session_id_, MediaChannelId::channel_0, video_frame);
+				buffer.RetrieveAll();
+			}
+		}
+		return true;
+	}
+
+	printf("***************************read******************************\n");
+	for (size_t i = 0; i < buffer.ReadableBytes(); i++)
+	{
+		printf("%c", buffer.Peek()[i]);
+	}
+	printf("\n");
+
+
+	if (rtsp_response_->ParseResponse(&buffer)) {
+		RtspResponse::Method method = rtsp_response_->GetMethod();
+		switch (method)
+		{
+		case RtspResponse::OPTIONS:
+			SendDescribe();
+			break;
+		case RtspResponse::ANNOUNCE:
+		case RtspResponse::DESCRIBE:
+			SendSetup();
+			break;
+		case RtspResponse::SETUP:
+			SendPlay();
+			break;
+		case RtspResponse::RECORD:
+			HandleRecord();
+			break;
+		default:
+			break;
+		}
+	}
+	else {
+		return false;
+	}
+
+	buffer.RetrieveAll();
+	return true;
+}
+
 
 void RtspConnection::SendRtspMessage(std::shared_ptr<char> buf, uint32_t size)
 {
@@ -362,6 +440,237 @@ void RtspConnection::SendRtspMessage(std::shared_ptr<char> buf, uint32_t size)
 	this->Send(buf, size);
 	return;
 }
+
+#if 1
+
+int xop::RtspConnection::ParseRtpPacket(const uint8_t * in, uint8_t* out, int len, bool& is_success, int& type)
+{
+	while (in[1] == 0x01)
+	{
+		int new_size = ((in[2] & 0xFF) << 8) | (in[3] & 0xFF);
+
+		in += new_size + 4;
+		len -= new_size + 4;;
+	}
+
+	if (in[0] != 0x24 || in[1] != 0x00)
+	{
+		printf("warning111...\n");
+		return 0;
+	}
+
+	int packet_size = 0;
+	unsigned char nal_head[4] = { 0x00,0x00,0x00,0x01 };
+
+	while (len > 0 && in[0] == 0x24 && in[1] == 0x00)
+	{
+		int new_size = ((in[2] & 0xFF) << 8) | (in[3] & 0xFF);
+
+		printf("len:%d,size:%d\n", len,new_size);
+
+		if (len - new_size < 4 || new_size > 1476)
+			return 0;
+
+		if (1472 > new_size)
+		 {
+			if (in[16] == 0x41 && in[17] == 0x9A)
+			{
+				memcpy(out, nal_head, 4);
+
+				packet_size += 4;
+				out += 4;
+
+				in += 16;
+				memcpy(out, in, new_size - 12);
+
+				in += new_size - 12;
+				out += new_size - 12;
+				packet_size += new_size - 12;
+				len -= new_size + 4;
+			}
+			else if ((in[17] & 0xE0) == 0x40)
+			{
+				in += 18;
+				memcpy(out, in, new_size - 14);
+
+				in += new_size - 14;
+				out += new_size - 14;
+				packet_size += new_size - 14;
+				len -= new_size + 4;
+			}
+			else if (in[16] == 0x18 && in[17] == 0x00)//ffmpeg 推流出来的pps、sps解析帧类型为0
+			{
+				printf("......\n");
+				uint8_t* tmp = frame_sps;
+				memcpy(out, nal_head, 4);		//NAL head
+				memcpy(tmp, nal_head, 4);
+				out += 4;
+				tmp += 4;
+				packet_size += 4;
+				frame_sps_size = 4;
+
+				in += 17;
+				int sps_size = ((in[0] & 0xFF) << 8) | (in[1] & 0xFF);
+
+				in += 2;
+				memcpy(out, in, sps_size);	//SPS
+				memcpy(tmp, in, sps_size);
+
+				in += sps_size;
+				out += sps_size;
+				tmp += sps_size;
+				packet_size += sps_size;
+				frame_sps_size += sps_size;
+
+				memcpy(out, nal_head, 4);		//NAL head
+				memcpy(tmp, nal_head, 4);
+				out += 4;
+				tmp += 4;
+				packet_size += 4;
+				frame_sps_size += 4;
+
+				int pps_size = ((in[0] & 0xFF) << 8) | (in[1] & 0xFF);
+				in += 2;
+				memcpy(out, in, pps_size);				//PPS
+				memcpy(tmp, in, pps_size);
+				out += pps_size;
+				in += pps_size;
+				packet_size += pps_size;
+				frame_sps_size += pps_size;
+
+				int tmp_head_size = new_size - 19 - sps_size - 2 - pps_size;
+				while (tmp_head_size != 0 && (in[0] != 0x24 || in[1] != 0x00))
+				{
+					memcpy(out, nal_head + 1, 3);		//NAL head  00 00 01
+					out += 3;
+					packet_size += 3;
+
+					int size = (in[0] << 8) | (in[1]);
+					in += 2;
+					memcpy(out, in, size);
+					out += size;
+					in += size;
+					packet_size += size;
+
+				}
+
+				len -= new_size + 4;
+			}
+			else if ((in[17] & 0x1F) > 0x00 && (in[17] & 0x1F) <= 0x0A)
+			{
+				unsigned char frame_type = (in[16] & 0xE0) | (in[17] & 0x1F);
+
+				if (frame_type == 0x65)
+					type = 1;
+
+				memcpy(out, nal_head, 4);
+				memcpy(out + 4, (void*)&frame_type, 1);
+
+				out += 5;
+				packet_size += 5;
+
+				in += 18;
+				memcpy(out, in, new_size - 14);
+
+				in += new_size - 14;
+				out += new_size - 14;
+				packet_size += new_size - 14;
+				len -= new_size + 4;
+			}
+			else
+			{
+				//for (size_t i = 0; i < new_size; i++)
+				//{
+				//	printf("%02X ", in[i]);
+				//}
+				//printf("\n");
+				len -= new_size + 4;
+				if (len <= 0)
+					break;
+				in += new_size + 4;	
+			}
+
+		}
+		else if ((in[17] & 0x1F) < 12 && (in[17] & 0xE0) == 0x80)
+		{
+			memcpy(out, nal_head, 4);
+			out[4] = (in[16] & 0xE0) | (in[17] & 0x1F);
+
+			out += 5;
+			packet_size += 5;
+
+			in += 18;
+			memcpy(out, in, new_size - 14);
+
+			in += new_size - 14;
+			out += new_size - 14;
+			packet_size += new_size - 14;
+
+			len -= new_size + 4;
+		}
+		else
+		{
+			in += 18;
+			memcpy(out, in, new_size - 14);
+
+			in += new_size - 14;
+			out += new_size - 14;
+			packet_size += new_size - 14;
+			len -= new_size + 4;
+
+		}
+	}
+
+	//	if(0 == len)
+	{
+		is_success = true;
+		return packet_size;
+	}
+	return 0;
+}
+#else
+
+int xop::RtspConnection::ParseRtpPacket(const uint8_t * in, uint8_t* out, int len, bool& is_success, int& type)
+{
+	uint8_t* in_data = (uint8_t*)in;
+	uint8_t* out_data = out;
+	uint8_t* tmp = in_data;
+	int max_packet_size = MAX_RTP_PAYLOAD_SIZE + 12 + 4;
+	int fua_head_size = 2;
+
+	int copy_size = 0;
+
+	if (len <= max_packet_size)//存在第一次接受就接收到不足1436字节但是属于FU_A分包的概率
+	{
+		copy_size = len - RTP_HEADER_SIZE - 4;
+		memcpy(out_data, in_data + RTP_HEADER_SIZE + 4, copy_size);
+		is_success = true;
+	}
+	else
+	{
+		while (len > max_packet_size)
+		{
+			in_data += RTP_HEADER_SIZE + RTP_TCP_HEAD_SIZE + fua_head_size;
+			memcpy(out_data, in_data, MAX_RTP_PAYLOAD_SIZE - fua_head_size);
+			len -= max_packet_size;
+			in_data += MAX_RTP_PAYLOAD_SIZE - fua_head_size;
+			out_data += MAX_RTP_PAYLOAD_SIZE - fua_head_size;
+			copy_size += MAX_RTP_PAYLOAD_SIZE - fua_head_size;
+		}
+		
+		if (len > 18 && (in_data[17] & 0x40) == 0x40)
+		{
+			is_success = true;
+
+			in_data += RTP_HEADER_SIZE + RTP_TCP_HEAD_SIZE + fua_head_size;
+			memcpy(out_data, in_data, len - RTP_HEADER_SIZE - RTP_TCP_HEAD_SIZE - fua_head_size);
+			copy_size += len - RTP_HEADER_SIZE - RTP_TCP_HEAD_SIZE - fua_head_size;
+		}
+	}
+
+	return copy_size;
+}
+#endif
 
 void RtspConnection::HandleRtcp(BufferReader& buffer)
 {    
@@ -430,6 +739,8 @@ void RtspConnection::HandleCmdDescribe()
 		}
 		else {
 			size = rtsp_request_->BuildDescribeRes(res.get(), 4096, sdp.c_str());		
+			has_connect = true;
+			printf("has new connect!\n");
 		}
 	}
 
@@ -676,6 +987,11 @@ void RtspConnection::HandleCmdTeardown()
 {
 	rtp_conn_->Teardown();
 
+	if (remove_session_cb)
+	{
+		remove_session_cb(rtsp_request_->GetRtspUrlSuffix());//关闭session
+	}
+
 	uint16_t session_id = rtp_conn_->GetRtpSessionId();
 	std::shared_ptr<char> res(new char[2048]);
 	int size = rtsp_request_->BuildTeardownRes(res.get(), 2048, session_id);
@@ -796,6 +1112,18 @@ void RtspConnection::SendSetup()
 	auto rtsp = rtsp_.lock();
 	if (rtsp) {
 		media_session = rtsp->LookMediaSession(session_id_);
+		if (!media_session)
+		{
+			media_session.reset(MediaSession::CreateNew(rtsp_request_->GetRtspUrlSuffix()));
+			media_session->AddSource(channel_0, H264Source::CreateNew());
+			if (new_session_cb)
+			{
+				new_session_cb(media_session.get());
+			}
+
+			session_id_ = media_session->GetMediaSessionId();
+			media_session->AddClient(this->GetSocket(), rtp_conn_);
+		}
 	}
 	
 	if (!rtsp || !media_session) {
@@ -815,6 +1143,13 @@ void RtspConnection::SendSetup()
 		size = rtsp_response_->BuildRecordReq(buf.get(), 2048);
 	}
 
+	SendRtspMessage(buf, size);
+}
+
+void xop::RtspConnection::SendPlay()
+{
+	std::shared_ptr<char> buf(new char[2048]);
+	int size = rtsp_response_->BuildPlay(buf.get(), 2048);
 	SendRtspMessage(buf, size);
 }
 
